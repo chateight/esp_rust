@@ -31,10 +31,12 @@ use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_println::println;
 use esp_radio::wifi::{sta::StationConfig, Config, ControllerConfig, Interface, WifiController};
 
-use core::sync::atomic::{AtomicI16, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicI16, Ordering};
 
-static LEFT_POWER: AtomicI16 = AtomicI16::new(50);
-static RIGHT_POWER: AtomicI16 = AtomicI16::new(50);
+static LEFT_POWER: AtomicI16 = AtomicI16::new(25);
+static RIGHT_POWER: AtomicI16 = AtomicI16::new(25);
+
+static GO_STOP: AtomicBool = AtomicBool::new(false);
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
@@ -93,8 +95,10 @@ async fn main(spawner: Spawner) -> ! {
     // motor task設定
     let motor_pin_right = Output::new(peripherals.GPIO6, Level::Low, OutputConfig::default());
     let motor_pin_left = Output::new(peripherals.GPIO7, Level::Low, OutputConfig::default());
-    let mut motor_direction_right = Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
-    let mut motor_direction_left = Output::new(peripherals.GPIO9, Level::Low, OutputConfig::default());
+    let mut motor_direction_right =
+        Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
+    let mut motor_direction_left =
+        Output::new(peripherals.GPIO9, Level::Low, OutputConfig::default());
     motor_direction_right.set_high(); // 右モーターの回転方向を設定
     motor_direction_left.set_high(); // 左モーターの回転方向を設定
 
@@ -123,10 +127,9 @@ async fn motor_task_right(mut pin: Output<'static>) {
 
     loop {
         // 0〜100想定
-        let power = RIGHT_POWER.load(Ordering::Relaxed);
+        let mut power = RIGHT_POWER.load(Ordering::Relaxed);
 
-        let power = power.clamp(0, 100);
-
+        power = power.clamp(0, 100);
         let high_time = (PWM_PERIOD_US * power as u64) / 100;
 
         let low_time = PWM_PERIOD_US - high_time;
@@ -151,9 +154,9 @@ async fn motor_task_left(mut pin: Output<'static>) {
 
     loop {
         // 0〜100想定
-        let power = LEFT_POWER.load(Ordering::Relaxed);
+        let mut power = LEFT_POWER.load(Ordering::Relaxed);
 
-        let power = power.clamp(0, 100);
+        power = power.clamp(0, 100);
 
         let high_time = (PWM_PERIOD_US * power as u64) / 100;
 
@@ -189,6 +192,14 @@ async fn adc_task(
     let mut adc = Adc::new(adc_peripheral, adc_config);
 
     loop {
+        let go = GO_STOP.load(Ordering::Relaxed);
+        if !go {                                            // if GO_STOP is false, skip reading ADC and set motors to idle
+            RIGHT_POWER.store(0, Ordering::Relaxed);
+            LEFT_POWER.store(0, Ordering::Relaxed);
+            Timer::after(Duration::from_millis(10)).await;  // idle 状態でのCPU負荷を下げるために少し待機
+            continue;
+        }
+
         let value_right = loop {
             match adc.read_oneshot(&mut adc_pin_right) {
                 Ok(v) => break v,
@@ -209,20 +220,20 @@ async fn adc_task(
         let value_right = (value_right as i16) / 40; // 0-4095を0〜100に変換
         let value_left = (value_left as i16) / 40; // 0-4095を0〜100に変換
 
-        let pow_coeff = 3.0;
-        let bp = 50.0; // ベースのモーター出力（0~100）
-        let idle_power = 20.0; // 最小出力（0~100）
+        let pow_coeff = 2.0;
+        let bp = 25.0; // ベースのモーター出力（0~100）
+        let idle_power = 5.0; // 最小出力（0~100）
 
         let diff = value_right - value_left;
         let sum = value_right + value_left;
-        let ratio = ((diff as f32)* pow_coeff / (sum as f32)).clamp(1.0, 2.0);
+        let ratio = ((diff as f32) * pow_coeff / (sum as f32)).clamp(1.0, 2.0);
         let motor_power = (ratio * bp) as i16;
 
-        if diff > 10 {
+        if diff > 5 {
             // センサーの右が明るいときは右を強く、左を弱く
             RIGHT_POWER.store(motor_power, Ordering::Relaxed);
             LEFT_POWER.store(idle_power as i16, Ordering::Relaxed);
-        } else if diff < -10 {
+        } else if diff < -5 {
             // センサーの左が明るいときは左を強く、右を弱く
             RIGHT_POWER.store(idle_power as i16, Ordering::Relaxed);
             LEFT_POWER.store(motor_power, Ordering::Relaxed);
@@ -232,9 +243,9 @@ async fn adc_task(
             LEFT_POWER.store(motor_power, Ordering::Relaxed);
         }
 
-        println!("ADC Raw Value: {}, {}", value_right, value_left);
+        //println!("ADC Raw Value: {}, {}", value_right, value_left);
 
-        Timer::after(Duration::from_millis(100)).await;
+        Timer::after(Duration::from_millis(10)).await; 
     }
 }
 
@@ -270,6 +281,11 @@ async fn udp_server_task(stack: Stack<'static>) {
                     // "0" や "1" など、ライントレーサーのコマンドとして
                     let command = s.trim();
                     if command == "0" || command == "1" {
+                        if command == "1" {
+                            GO_STOP.store(true, Ordering::Relaxed);
+                        } else if command == "0" {
+                            GO_STOP.store(false, Ordering::Relaxed);
+                        }
                         println!("COMMAND: {}", command);
                     } else {
                         // x などの儀式パケットが来ても、何もしない（continue）

@@ -225,7 +225,7 @@ async fn adc_task(
         let idle_power = 5.0; // 最小出力（0~100）
 
         let diff = value_right - value_left;
-        let sum = value_right + value_left;
+        let sum = value_right + value_left + 1; // ゼロ割り防止のために1加算
         let ratio = ((diff as f32) * pow_coeff / (sum as f32)).clamp(1.0, 2.0);
         let motor_power = (ratio * bp) as i16;
 

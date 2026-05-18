@@ -4,10 +4,10 @@
 // GPIOの割り当て
 // sensor right -> GPIO2 (ADC1_CH2)
 // sensor left -> GPIO3 (ADC1_CH3)
-// motor right -> GPIO6
+// motor right -> GPIO9
 // motor left -> GPIO7
 // motor direction right -> GPIO8
-// motor direction left -> GPIO9
+// motor direction left -> GPIO6
 
 use embassy_executor::Spawner;
 use embassy_net::{
@@ -93,12 +93,12 @@ async fn main(spawner: Spawner) -> ! {
     );
 
     // motor task設定
-    let mut motor_pin_right = Output::new(peripherals.GPIO6, Level::Low, OutputConfig::default());
+    let mut motor_pin_right = Output::new(peripherals.GPIO9, Level::Low, OutputConfig::default());
     let mut motor_pin_left = Output::new(peripherals.GPIO7, Level::Low, OutputConfig::default());
     let mut motor_direction_right =
         Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
     let mut motor_direction_left =
-        Output::new(peripherals.GPIO9, Level::Low, OutputConfig::default());
+        Output::new(peripherals.GPIO6, Level::Low, OutputConfig::default());
     motor_direction_right.set_high(); // 右モーターの回転方向を設定
     motor_direction_left.set_high(); // 左モーターの回転方向を設定
     motor_pin_right.set_low(); // 初期状態は停止
@@ -125,7 +125,7 @@ async fn main(spawner: Spawner) -> ! {
 
 #[embassy_executor::task]
 async fn motor_task_right(mut pin: Output<'static>) {
-    const PWM_PERIOD_US: u64 = 1000;
+    const PWM_PERIOD_US: u64 = 2000;
     Timer::after(Duration::from_millis(1000)).await; // 起動後すぐにモーターが動かないように1秒待機
 
      loop {
@@ -154,7 +154,7 @@ async fn motor_task_right(mut pin: Output<'static>) {
 
 #[embassy_executor::task]
 async fn motor_task_left(mut pin: Output<'static>) {
-    const PWM_PERIOD_US: u64 = 1000;
+    const PWM_PERIOD_US: u64 = 2000;
     Timer::after(Duration::from_millis(1000)).await; // 起動後すぐにモーターが動かないように1秒待機
 
     loop {

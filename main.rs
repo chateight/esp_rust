@@ -4,7 +4,7 @@
 // GPIOの割り当て
 // sensor right -> GPIO2 (ADC1_CH2)
 // sensor left -> GPIO3 (ADC1_CH3)
-// motor right -> GPIO9
+// motor right -> GPIO5
 // motor left -> GPIO7
 // motor direction right -> GPIO8
 // motor direction left -> GPIO6
@@ -99,7 +99,7 @@ async fn main(spawner: Spawner) -> ! {
     );
 
     // motor task設定
-    let mut motor_pin_right = Output::new(peripherals.GPIO9, Level::Low, OutputConfig::default());
+    let mut motor_pin_right = Output::new(peripherals.GPIO5, Level::Low, OutputConfig::default());
     let mut motor_pin_left = Output::new(peripherals.GPIO7, Level::Low, OutputConfig::default());
     let mut motor_direction_right =
         Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
@@ -337,7 +337,7 @@ async fn udp_sender_task(stack: Stack<'static>) {
     socket.bind(5001).unwrap();
 
     // 送信先PCのIPとポート
-    let remote = IpEndpoint::new(embassy_net::IpAddress::v4(192, 168, 1, 11), 5001);
+    let remote = IpEndpoint::new(embassy_net::IpAddress::v4(192, 168, 1, 10), 5001);
 
     let mut accumulation: i16 = 0;
 

@@ -1,5 +1,5 @@
 /*
-read m5stack udp data(IMU data ; pitch, roll, yaw) and move the imaginary object
+read ESP32 udp data(car angle) and move the 3D object
 
 */
 import hypermedia.net.*;
